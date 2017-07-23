@@ -1,0 +1,225 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: piwik
+  annotations:
+    description: "Liberating Analytics. Piwik is the leading open-source analytics platform that gives you more than just powerful analytics."
+    tags: "analytics,piwik"
+    iconClass: fa-cloud-upload
+    template.openshift.io/provider-display-name: "tobrunet"
+    template.openshift.io/documentation-url: "https://github.com/tobru/piwik-openshift/blob/master/README.md"
+    template.openshift.io/support-url: "https://github.com/tobru/piwik-openshift/issues"
+parameters:
+- name: PIWIK_HOST
+  description: Application URL of Piwik (Route/host)
+  required: true
+- name: PIWIK_IMAGE_TAG
+  description: Tag of the Piwik Docker Image to deploy
+  value: 3-fpm
+- name: NGINX_DOCKERFILE_REPO
+  description: Nginx Dockerfile source repository
+  value: https://github.com/tobru/piwik-openshift.git
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: piwik
+    name: piwik
+  spec:
+    tags:
+    - annotations:
+        openshift.io/imported-from: piwik:${PIWIK_IMAGE_TAG}
+      from:
+        kind: DockerImage
+        name: piwik:${PIWIK_IMAGE_TAG}
+      importPolicy:
+        scheduled: true
+      name: ${PIWIK_IMAGE_TAG}
+      referencePolicy:
+        type: Source
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      build: nginx
+      app: piwik
+    name: nginx
+  spec:
+    tags:
+    - annotations: null
+      from:
+        kind: DockerImage
+        name: nginx:latest
+      generation: null
+      importPolicy: {}
+      name: latest
+      referencePolicy:
+        type: ""
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      build: nginx
+      app: piwik
+    name: nginx
+  spec:
+    nodeSelector: null
+    output:
+      to:
+        kind: ImageStreamTag
+        name: nginx:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      git:
+        uri: ${NGINX_DOCKERFILE_REPO}
+      type: Git
+    strategy:
+      dockerStrategy:
+        from:
+          kind: DockerImage
+          name: nginx:alpine
+      type: Docker
+    triggers:
+    - type: ConfigChange
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      app: piwik
+    name: piwik
+  spec:
+    replicas: 1
+    selector:
+      app: piwik
+      deploymentconfig: piwik
+    strategy:
+      activeDeadlineSeconds: 21600
+      resources: {}
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 25%
+        maxUnavailable: 25%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          app: piwik
+          deploymentconfig: piwik
+      spec:
+        containers:
+        - image: piwik
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 9000
+            timeoutSeconds: 5
+          name: piwik
+          ports:
+          - containerPort: 9000
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 9000
+            timeoutSeconds: 5
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+          - mountPath: /var/www/html
+            name: piwik-source
+        - image: nginx
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 8080
+            timeoutSeconds: 1
+          name: nginx
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 8080
+            timeoutSeconds: 1
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+          - mountPath: /var/www/html
+            name: piwik-source
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - emptyDir: {}
+          name: piwik-source
+    test: false
+    triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - piwik
+        from:
+          kind: ImageStreamTag
+          name: piwik:${PIWIK_IMAGE_TAG}
+      type: ImageChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - nginx
+        from:
+          kind: ImageStreamTag
+          name: nginx:latest
+      type: ImageChange
+    - type: ConfigChange
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: piwik
+    name: piwik
+  spec:
+    ports:
+    - name: 8080-tcp
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      app: piwik
+      deploymentconfig: piwik
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: piwik
+  spec:
+    host: ${PIWIK_HOST}
+    port:
+      targetPort: 8080-tcp
+    to:
+      kind: Service
+      name: piwik
+      weight: 100
+    wildcardPolicy: None
