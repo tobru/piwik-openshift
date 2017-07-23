@@ -14,7 +14,7 @@ oc -n openshift process mariadb-persistent -p MYSQL_DATABASE=piwik | oc -n MYNAM
 ### 2 Deploy Piwik
 
 ```
-oc process -f https://raw.githubusercontent.com/tobru/piwik-openshift/master/piwik.yaml -p PIWIK_HOST=stats.example.com | oc -n MYNAMESPACE create -f -
+oc process -f https://raw.githubusercontent.com/tobru/piwik-openshift/master/piwik.yaml -p APP_URL=stats.example.com | oc -n MYNAMESPACE create -f -
 ```
 
 #### Template parameters

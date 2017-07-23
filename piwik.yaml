@@ -10,7 +10,7 @@ metadata:
     template.openshift.io/documentation-url: "https://github.com/tobru/piwik-openshift/blob/master/README.md"
     template.openshift.io/support-url: "https://github.com/tobru/piwik-openshift/issues"
 parameters:
-- name: PIWIK_HOST
+- name: APP_URL
   description: Application URL of Piwik (Route/host)
   required: true
 - name: PIWIK_IMAGE_TAG
@@ -19,7 +19,20 @@ parameters:
 - name: NGINX_DOCKERFILE_REPO
   description: Nginx Dockerfile source repository
   value: https://github.com/tobru/piwik-openshift.git
+- name: PVC_SIZE_CONFIG
+  description: PVC size for config files
+  value: 1Gi
 objects:
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: app-config
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: ${PVC_SIZE_CONFIG}
 - apiVersion: v1
   kind: ImageStream
   metadata:
@@ -167,6 +180,8 @@ objects:
           volumeMounts:
           - mountPath: /var/www/html
             name: piwik-source
+          - mountPath: /var/www/html/config
+            name: app-config
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         securityContext: {}
@@ -174,6 +189,9 @@ objects:
         volumes:
         - emptyDir: {}
           name: piwik-source
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: app-data
     test: false
     triggers:
     - imageChangeParams:
@@ -215,7 +233,7 @@ objects:
   metadata:
     name: piwik
   spec:
-    host: ${PIWIK_HOST}
+    host: ${APP_URL}
     port:
       targetPort: 8080-tcp
     to:
@@ -223,3 +241,42 @@ objects:
       name: piwik
       weight: 100
     wildcardPolicy: None
+- apiVersion: batch/v2alpha1
+  kind: CronJob
+  metadata:
+    name: piwik
+  spec:
+    concurrencyPolicy: Replace
+    jobTemplate:
+      spec:
+        activeDeadlineSeconds: 3600
+        template:
+          spec:
+            containers:
+            - args:
+              - php
+              - -f
+              - /var/www/html/console
+              - core:archive
+              image: piwik
+              imagePullPolicy: Always
+              name: cron
+              resources: {}
+              terminationMessagePath: /dev/termination-log
+              volumeMounts:
+              - mountPath: /var/www/html
+                name: piwik-source
+              - mountPath: /var/www/html/config
+                name: app-config
+            dnsPolicy: ClusterFirst
+            restartPolicy: Never
+            securityContext: {}
+            terminationGracePeriodSeconds: 30
+            volumes:
+            - emptyDir: {}
+              name: nextcloud-source
+            - name: app-config
+              persistentVolumeClaim:
+                claimName: app-config
+    schedule: '5 * * * *'
+    suspend: false
