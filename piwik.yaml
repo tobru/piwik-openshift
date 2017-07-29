@@ -153,6 +153,8 @@ objects:
           volumeMounts:
           - mountPath: /var/www/html
             name: piwik-source
+          - mountPath: /var/www/html/config
+            name: app-config
         - image: nginx
           imagePullPolicy: Always
           livenessProbe:
@@ -180,8 +182,6 @@ objects:
           volumeMounts:
           - mountPath: /var/www/html
             name: piwik-source
-          - mountPath: /var/www/html/config
-            name: app-config
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         securityContext: {}
@@ -189,9 +189,9 @@ objects:
         volumes:
         - emptyDir: {}
           name: piwik-source
-        - name: app-data
+        - name: app-config
           persistentVolumeClaim:
-            claimName: app-data
+            claimName: app-config
     test: false
     triggers:
     - imageChangeParams:
@@ -253,11 +253,11 @@ objects:
         template:
           spec:
             containers:
-            - args:
-              - php
-              - -f
-              - /var/www/html/console
-              - core:archive
+            - command:
+              - bash
+              - -c
+              - tar cf - --one-file-system -C /usr/src/piwik . | tar xf - --no-overwrite-dir
+                && php -f /var/www/html/console core:archive
               image: piwik
               imagePullPolicy: Always
               name: cron
@@ -274,7 +274,7 @@ objects:
             terminationGracePeriodSeconds: 30
             volumes:
             - emptyDir: {}
-              name: nextcloud-source
+              name: piwik-source
             - name: app-config
               persistentVolumeClaim:
                 claimName: app-config
