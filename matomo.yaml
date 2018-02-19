@@ -1,20 +1,23 @@
 apiVersion: v1
 kind: Template
 metadata:
-  name: piwik
+  name: matomo
   annotations:
-    description: "Liberating Analytics. Piwik is the leading open-source analytics platform that gives you more than just powerful analytics."
-    tags: "analytics,piwik"
+    description: "Liberating Analytics. Matomo is the only web and mobile analytics platform that gives you full control over your data and more."
+    tags: "analytics,piwik,matomo"
     iconClass: fa-cloud-upload
     template.openshift.io/provider-display-name: "tobrunet"
     template.openshift.io/documentation-url: "https://github.com/tobru/piwik-openshift/blob/master/README.md"
     template.openshift.io/support-url: "https://github.com/tobru/piwik-openshift/issues"
 parameters:
 - name: APP_URL
-  description: Application URL of Piwik (Route/host)
+  description: Application URL of Matomo (Route/host)
   required: true
-- name: PIWIK_IMAGE_TAG
-  description: Tag of the Piwik Docker Image to deploy
+- name: MATOMO_IMAGE_SOURCE
+  description: Source of the Matomo Docker Image to deploy
+  value: docker.io/piwik
+- name: MATOMO_IMAGE_TAG
+  description: Tag of the Matomo Docker Image to deploy
   value: 3-fpm
 - name: NGINX_DOCKERFILE_REPO
   description: Nginx Dockerfile source repository
@@ -37,18 +40,18 @@ objects:
   kind: ImageStream
   metadata:
     labels:
-      app: piwik
-    name: piwik
+      app: matomo
+    name: matomo
   spec:
     tags:
     - annotations:
-        openshift.io/imported-from: piwik:${PIWIK_IMAGE_TAG}
+        openshift.io/imported-from: ${MATOMO_IMAGE_SOURCE}:${MATOMO_IMAGE_TAG}
       from:
         kind: DockerImage
-        name: piwik:${PIWIK_IMAGE_TAG}
+        name: ${MATOMO_IMAGE_SOURCE}:${MATOMO_IMAGE_TAG}
       importPolicy:
         scheduled: true
-      name: ${PIWIK_IMAGE_TAG}
+      name: ${MATOMO_IMAGE_TAG}
       referencePolicy:
         type: Source
 - apiVersion: v1
@@ -56,7 +59,7 @@ objects:
   metadata:
     labels:
       build: nginx
-      app: piwik
+      app: matomo
     name: nginx
   spec:
     tags:
@@ -75,7 +78,7 @@ objects:
     creationTimestamp: null
     labels:
       build: nginx
-      app: piwik
+      app: matomo
     name: nginx
   spec:
     nodeSelector: null
@@ -102,13 +105,13 @@ objects:
   kind: DeploymentConfig
   metadata:
     labels:
-      app: piwik
-    name: piwik
+      app: matomo
+    name: matomo
   spec:
     replicas: 1
     selector:
-      app: piwik
-      deploymentconfig: piwik
+      app: matomo
+      deploymentconfig: matomo
     strategy:
       activeDeadlineSeconds: 21600
       resources: {}
@@ -122,11 +125,11 @@ objects:
     template:
       metadata:
         labels:
-          app: piwik
-          deploymentconfig: piwik
+          app: matomo
+          deploymentconfig: matomo
       spec:
         containers:
-        - image: piwik
+        - image: matomo
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
@@ -136,7 +139,7 @@ objects:
             tcpSocket:
               port: 9000
             timeoutSeconds: 5
-          name: piwik
+          name: matomo
           ports:
           - containerPort: 9000
             protocol: TCP
@@ -152,7 +155,7 @@ objects:
           terminationMessagePath: /dev/termination-log
           volumeMounts:
           - mountPath: /var/www/html
-            name: piwik-source
+            name: matomo-source
           - mountPath: /var/www/html/config
             name: app-config
         - image: nginx
@@ -181,14 +184,14 @@ objects:
           terminationMessagePath: /dev/termination-log
           volumeMounts:
           - mountPath: /var/www/html
-            name: piwik-source
+            name: matomo-source
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         securityContext: {}
         terminationGracePeriodSeconds: 30
         volumes:
         - emptyDir: {}
-          name: piwik-source
+          name: matomo-source
         - name: app-config
           persistentVolumeClaim:
             claimName: app-config
@@ -197,10 +200,10 @@ objects:
     - imageChangeParams:
         automatic: true
         containerNames:
-        - piwik
+        - matomo
         from:
           kind: ImageStreamTag
-          name: piwik:${PIWIK_IMAGE_TAG}
+          name: matomo:${MATOMO_IMAGE_TAG}
       type: ImageChange
     - imageChangeParams:
         automatic: true
@@ -215,8 +218,8 @@ objects:
   kind: Service
   metadata:
     labels:
-      app: piwik
-    name: piwik
+      app: matomo
+    name: matomo
   spec:
     ports:
     - name: 8080-tcp
@@ -224,27 +227,27 @@ objects:
       protocol: TCP
       targetPort: 8080
     selector:
-      app: piwik
-      deploymentconfig: piwik
+      app: matomo
+      deploymentconfig: matomo
     sessionAffinity: None
     type: ClusterIP
 - apiVersion: v1
   kind: Route
   metadata:
-    name: piwik
+    name: matomo
   spec:
     host: ${APP_URL}
     port:
       targetPort: 8080-tcp
     to:
       kind: Service
-      name: piwik
+      name: matomo
       weight: 100
     wildcardPolicy: None
 - apiVersion: batch/v2alpha1
   kind: CronJob
   metadata:
-    name: piwik
+    name: matomo
   spec:
     concurrencyPolicy: Replace
     jobTemplate:
@@ -256,16 +259,16 @@ objects:
             - command:
               - bash
               - -c
-              - tar cf - --one-file-system -C /usr/src/piwik . | tar xf - --no-overwrite-dir
+              - tar cf - --one-file-system -C /usr/src/matomo . | tar xf - --no-overwrite-dir
                 && php -f /var/www/html/console core:archive
-              image: piwik
+              image: matomo
               imagePullPolicy: Always
               name: cron
               resources: {}
               terminationMessagePath: /dev/termination-log
               volumeMounts:
               - mountPath: /var/www/html
-                name: piwik-source
+                name: matomo-source
               - mountPath: /var/www/html/config
                 name: app-config
             dnsPolicy: ClusterFirst
@@ -274,7 +277,7 @@ objects:
             terminationGracePeriodSeconds: 30
             volumes:
             - emptyDir: {}
-              name: piwik-source
+              name: matomo-source
             - name: app-config
               persistentVolumeClaim:
                 claimName: app-config
