@@ -249,6 +249,8 @@ objects:
   metadata:
     name: matomo
   spec:
+    successfulJobsHistoryLimit: 1
+    failedJobsHistoryLimit: 1
     concurrencyPolicy: Replace
     jobTemplate:
       spec:
@@ -272,7 +274,7 @@ objects:
               - mountPath: /var/www/html/config
                 name: app-config
             dnsPolicy: ClusterFirst
-            restartPolicy: Never
+            restartPolicy: OnFailure
             securityContext: {}
             terminationGracePeriodSeconds: 30
             volumes:
