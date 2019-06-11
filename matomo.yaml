@@ -258,11 +258,10 @@ objects:
         template:
           spec:
             containers:
-            - command:
-              - bash
+            - args:
+              - /bin/sh
               - -c
-              - tar cf - --one-file-system -C /usr/src/matomo . | tar xf - --no-overwrite-dir
-                && php -f /var/www/html/console core:archive
+              - ./console core:archive
               image: matomo
               imagePullPolicy: Always
               name: cron
