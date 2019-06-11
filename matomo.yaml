@@ -261,8 +261,7 @@ objects:
             - args:
               - /bin/sh
               - -c
-              # true; is a workaround solution
-              - true; /usr/local/bin/php /var/www/html/console core:archive
+              - ./console core:archive
               image: matomo
               imagePullPolicy: Always
               name: cron
